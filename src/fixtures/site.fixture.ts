@@ -10,10 +10,14 @@
  */
 
 import { test as base, expect } from '@playwright/test';
-import { loadSiteConfig, type SiteConfig } from '@types/site-config.types';
+import { loadSiteConfig, type SiteConfig } from '@site-types/site-config.types';
 import { HomePage } from '@pages/home.page';
 import { NavigationPage } from '@pages/navigation.page';
-import { ContactFormPage } from '@pages/contact.page';
+import { ContactPage, ContactFormPage } from '@pages/contact.page';
+import { EvolutionPage } from '@pages/evolution.page';
+import { ServicesPage } from '@pages/services.page';
+import { AboutPage } from '@pages/about.page';
+import { PciPage } from '@pages/pci.page';
 
 // ── Fixture type definitions ─────────────────────────────────────────────────
 
@@ -24,8 +28,16 @@ export interface Fixtures {
   homePage: HomePage;
   /** NavigationPage page object (does not auto-navigate) */
   navigationPage: NavigationPage;
-  /** ContactFormPage page object (does not auto-navigate) */
-  contactPage: ContactFormPage;
+  /** ContactPage page object for /contact.html (does not auto-navigate) */
+  contactPage: ContactPage;
+  /** EboCom Evolution product page (/ee.html) — does not auto-navigate */
+  evolutionPage: EvolutionPage;
+  /** Services page (/services.html) — does not auto-navigate */
+  servicesPage: ServicesPage;
+  /** About Us page (/about.html) — does not auto-navigate */
+  aboutPage: AboutPage;
+  /** PCI Compliance page (/pci.html) — does not auto-navigate */
+  pciPage: PciPage;
 }
 
 // ── Extended test object ─────────────────────────────────────────────────────
@@ -52,7 +64,7 @@ export const test = base.extend<Fixtures>({
 
   /**
    * navigationPage — constructs NavigationPage without navigating.
-   * Tests that need to be on a specific page should call navigate() themselves.
+   * Tests should call navigate() or navigate to the desired page first.
    */
   navigationPage: async ({ page, siteConfig }, use) => {
     const navigationPage = new NavigationPage(page, siteConfig);
@@ -60,14 +72,50 @@ export const test = base.extend<Fixtures>({
   },
 
   /**
-   * contactPage — constructs ContactFormPage without navigating.
-   * Tests should navigate to the appropriate page first.
+   * contactPage — constructs ContactPage for /contact.html without navigating.
+   * Tests should call contactPage.navigate() first.
+   * NOTE: eboCom has no HTML form — contact is via mailto: links only.
    */
   contactPage: async ({ page, siteConfig }, use) => {
-    const contactPage = new ContactFormPage(page, siteConfig);
+    const contactPage = new ContactPage(page, siteConfig);
     await use(contactPage);
+  },
+
+  /**
+   * evolutionPage — constructs EvolutionPage for /ee.html without navigating.
+   */
+  evolutionPage: async ({ page, siteConfig }, use) => {
+    const evolutionPage = new EvolutionPage(page, siteConfig);
+    await use(evolutionPage);
+  },
+
+  /**
+   * servicesPage — constructs ServicesPage for /services.html without navigating.
+   */
+  servicesPage: async ({ page, siteConfig }, use) => {
+    const servicesPage = new ServicesPage(page, siteConfig);
+    await use(servicesPage);
+  },
+
+  /**
+   * aboutPage — constructs AboutPage for /about.html without navigating.
+   */
+  aboutPage: async ({ page, siteConfig }, use) => {
+    const aboutPage = new AboutPage(page, siteConfig);
+    await use(aboutPage);
+  },
+
+  /**
+   * pciPage — constructs PciPage for /pci.html without navigating.
+   */
+  pciPage: async ({ page, siteConfig }, use) => {
+    const pciPage = new PciPage(page, siteConfig);
+    await use(pciPage);
   },
 });
 
 // Re-export expect so tests only need one import source
 export { expect };
+
+// Re-export ContactFormPage alias for backwards compatibility
+export { ContactFormPage };

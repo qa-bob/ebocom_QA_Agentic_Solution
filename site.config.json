@@ -1,23 +1,25 @@
-﻿{
-    "name":  "eboCom",
-    "url":  "https://www.ebocom.com",
-    "description":  "",
-    "industry":  "",
-    "hasContactForm":  true,
-    "expectedNavItems":  [
-
-                         ],
-    "viewports":  [
-                      "desktop",
-                      "mobile",
-                      "tablet"
-                  ],
-    "skipVisual":  false,
-    "skipForms":  false,
-    "auth":  {
-                 "required":  false,
-                 "loginUrl":  "",
-                 "username":  "",
-                 "password":  ""
-             }
+{
+  "name": "EboCom, LLC",
+  "url": "https://www.ebocom.com",
+  "description": "EboCom, LLC is a third-party back-office payment processor specializing in integrated electronic transaction solutions for complex, enterprise-level merchants including hotels, universities, casinos, and internet marketplaces.",
+  "industry": "Fintech / Payment Processing",
+  "hasContactForm": false,
+  "expectedNavItems": [
+    "EboCom Evolution",
+    "About Us",
+    "Services",
+    "PCI Compliance",
+    "Awards",
+    "Media",
+    "Job Opportunities"
+  ],
+  "viewports": ["desktop", "mobile", "tablet"],
+  "skipVisual": false,
+  "skipForms": true,
+  "auth": {
+    "required": false,
+    "loginUrl": "",
+    "username": "",
+    "password": ""
+  }
 }

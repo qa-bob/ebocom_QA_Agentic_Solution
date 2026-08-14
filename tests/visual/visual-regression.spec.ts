@@ -18,6 +18,15 @@ const SCREENSHOT_OPTIONS = {
   fullPage: true,
 } as const;
 
+// Page baselines: slug → relative URL path
+const INNER_PAGES: Array<{ slug: string; path: string; label: string }> = [
+  { slug: 'evolution',  path: '/ee.html',       label: 'EboCom Evolution' },
+  { slug: 'services',  path: '/services.html',  label: 'Services' },
+  { slug: 'about',     path: '/about.html',     label: 'About Us' },
+  { slug: 'pci',       path: '/pci.html',       label: 'PCI Compliance' },
+  { slug: 'contact',   path: '/contact.html',   label: 'Contact Us' },
+];
+
 test.describe('Visual Regression @visual', () => {
   // Skip entire suite when site config opts out
   test.beforeEach(async ({ siteConfig }) => {
@@ -26,7 +35,7 @@ test.describe('Visual Regression @visual', () => {
     }
   });
 
-  // ── Desktop ─────────────────────────────────────────────────────────────────
+  // ── Homepage baselines ───────────────────────────────────────────────────────
 
   test('homepage visual regression - desktop @visual', async ({ page, siteConfig }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
@@ -43,8 +52,6 @@ test.describe('Visual Regression @visual', () => {
     });
   });
 
-  // ── Mobile ──────────────────────────────────────────────────────────────────
-
   test('homepage visual regression - mobile @visual', async ({ page, siteConfig }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(siteConfig.url, { waitUntil: 'networkidle' });
@@ -57,8 +64,6 @@ test.describe('Visual Regression @visual', () => {
     });
   });
 
-  // ── Tablet ──────────────────────────────────────────────────────────────────
-
   test('homepage visual regression - tablet @visual', async ({ page, siteConfig }) => {
     await page.setViewportSize({ width: 768, height: 1024 });
     await page.goto(siteConfig.url, { waitUntil: 'networkidle' });
@@ -70,4 +75,25 @@ test.describe('Visual Regression @visual', () => {
       ...SCREENSHOT_OPTIONS,
     });
   });
+
+  // ── Inner-page baselines (desktop only) ─────────────────────────────────────
+  //
+  // These cover the five main content pages. Desktop-only because the site
+  // has no responsive meta viewport tag — mobile/tablet viewports render the
+  // same fixed-width layout and produce identical screenshots.
+
+  for (const { slug, path, label } of INNER_PAGES) {
+    test(`${label} page visual regression - desktop @visual`, async ({ page, siteConfig }) => {
+      const url = siteConfig.url.replace(/\/$/, '') + path;
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await page.goto(url, { waitUntil: 'networkidle' });
+
+      await dismissCookieBanner(page);
+      await page.waitForTimeout(500);
+
+      await expect(page).toHaveScreenshot(`${slug}-desktop.png`, {
+        ...SCREENSHOT_OPTIONS,
+      });
+    });
+  }
 });

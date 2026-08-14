@@ -1,3 +1,10 @@
+---
+name: site-analyzer
+description: Use when crawling a live website to discover its structure, nav items, forms, and configuration — e.g. when running /analyze-site or onboarding a new site to site.config.json. Prefer this agent over doing the crawl inline to keep exploration results out of the main context.
+model: claude-sonnet-4-6
+tools: WebFetch, Read, Write, Glob
+---
+
 # Agent: site-analyzer
 
 ## Role
@@ -57,7 +64,7 @@ A valid `site.config.json` object with all fields populated based on what was di
 3. **Dismiss cookie banners:** look for `button[aria-label*="accept" i]`, `button:has-text("Accept")`, etc.
 4. **Extract nav items:** query `nav a[href], [role="navigation"] a[href]`. Record text and href for each.
 5. **Find contact form:** check current page, then try `/contact`, `/contact-us`, `/get-in-touch`.
-6. **Infer industry:** scan `<h1>`, `<h2>`, and `<p>` content for industry keywords (SaaS, marketing, fintech, HR, etc.).
+6. **Infer industry:** scan `<h1>`, `<h2>`, and `<p>` content for industry keywords (SaaS, payments, fintech, HR, etc.).
 7. **Set skipVisual:** true only if the homepage has CSS animations that cannot be paused or random/rotating content.
 8. **Set auth.required:** true if any page load redirected to a URL containing `login`, `signin`, `auth`.
 9. **Validate** the JSON against the `SiteConfig` interface before outputting.
@@ -80,20 +87,9 @@ A valid `site.config.json` object with all fields populated based on what was di
 - If HTTP → HTTPS redirect: use the HTTPS URL
 - If www → apex or apex → www redirect: use the final canonical form
 
-### Sites with no visible nav
-- Some sites render nav only after scroll or interaction
-- Try scrolling to 20% page height before re-querying
-- If still no nav, set `expectedNavItems: []` and note the issue
-
-### Multi-page sites vs single-page apps
-- For SPAs: nav "links" may be `<button>` elements that update the hash — record these too
-- Use `href` to distinguish true navigation links from in-page interactive elements
-
 ## Output format
 
 Always output:
 1. The complete `site.config.json` JSON block
 2. An "Issues found" checklist of anything that should be fixed on the site
 3. A brief confidence assessment (High / Medium / Low) with reasoning
-
-Low confidence examples: auth-gated, heavy SPA with deferred rendering, site returned 5xx during analysis.

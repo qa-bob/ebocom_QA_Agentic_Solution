@@ -1,154 +1,111 @@
 /**
  * src/pages/contact.page.ts
  *
- * ContactFormPage provides methods for inspecting and interacting with
- * contact forms.  It explicitly does NOT submit forms to avoid sending
- * spam messages to real company inboxes.
+ * eboCom Contact Us page — https://www.ebocom.com/contact.html
+ *
+ * Site notes:
+ *   - No HTML form — contact is via mailto: links only
+ *   - hasContactForm: false, skipForms: true in site.config.json
+ *   - Two email addresses: info@ebocom.net (general) and jobs@ebocom.net (careers)
+ *   - Contains corporate headquarters address (Phoenix, AZ)
+ *   - Only page on the site with a semantic <footer> element
+ *   - URL: /contact.html (not /contact — /contact returns 404)
  */
 
 import { type Locator } from '@playwright/test';
 import { BasePage } from '@pages/base.page';
 
-export interface FormFieldInfo {
-  name: string;
-  type: string;
-  required: boolean;
+export interface ContactEmailInfo {
+  address: string;
+  href: string;
 }
 
-export class ContactFormPage extends BasePage {
-  // ── Form discovery ───────────────────────────────────────────────────────────
+export class ContactPage extends BasePage {
+  /** Primary "Contact Us" heading (h2) */
+  readonly heading: Locator;
+  /** General inquiries mailto link */
+  readonly generalEmailLink: Locator;
+  /** Career inquiries mailto link */
+  readonly careerEmailLink: Locator;
+  /** Semantic footer (unique to this page — other pages use bare <p>) */
+  readonly footer: Locator;
+  /** Corporate Headquarters h3 */
+  readonly headquartersHeading: Locator;
 
-  /**
-   * Find the primary contact form on the current page.
-   * Returns null if no form is found.
-   *
-   * Strategy (in priority order):
-   *  1. <form> with action containing "contact"
-   *  2. <form> containing an email input
-   *  3. First <form> on the page
-   */
+  constructor(page: import('@playwright/test').Page, config: import('@site-types/site-config.types').SiteConfig) {
+    super(page, config);
+    this.heading             = page.locator('h2').first();
+    this.generalEmailLink    = page.locator("a[href='mailto:info@ebocom.net']");
+    this.careerEmailLink     = page.locator("a[href='mailto:jobs@ebocom.net']");
+    this.footer              = page.locator('footer');
+    this.headquartersHeading = page.locator('h3').first();
+  }
+
+  override async navigate(): Promise<void> {
+    const base = this.config.url.replace(/\/$/, '');
+    await this.page.goto(`${base}/contact.html`, { waitUntil: 'domcontentloaded' });
+  }
+
+  // ── Content helpers ──────────────────────────────────────────────────────────
+
+  /** Returns the heading text ("Contact Us") */
+  async getHeadingText(): Promise<string> {
+    return (await this.heading.textContent())?.trim() ?? '';
+  }
+
+  /** Returns the general inquiries email address text. */
+  async getGeneralEmail(): Promise<string> {
+    return (await this.generalEmailLink.textContent())?.trim() ?? '';
+  }
+
+  /** Returns the careers email address text. */
+  async getCareerEmail(): Promise<string> {
+    return (await this.careerEmailLink.textContent())?.trim() ?? '';
+  }
+
+  /** Returns all mailto: links on the page as { address, href } objects. */
+  async getEmailLinks(): Promise<ContactEmailInfo[]> {
+    const mailtoLinks = this.page.locator("a[href^='mailto:']");
+    const count = await mailtoLinks.count();
+    const results: ContactEmailInfo[] = [];
+
+    for (let i = 0; i < count; i++) {
+      const link = mailtoLinks.nth(i);
+      const href = (await link.getAttribute('href')) ?? '';
+      const address = href.replace('mailto:', '').trim();
+      results.push({ address, href });
+    }
+
+    return results;
+  }
+
+  // ── Legacy form interface (returns safe no-op values since no form exists) ───
+
+  /** Always returns null — eboCom contact page has no HTML form. */
   async findContactForm(): Promise<Locator | null> {
-    // Strategy 1: form whose action URL hints "contact"
-    const byAction = this.page.locator('form[action*="contact" i], form[action*="message" i]');
-    if (await byAction.count() > 0) return byAction.first();
-
-    // Strategy 2: form containing an email field
-    const withEmail = this.page.locator('form').filter({
-      has: this.page.locator('input[type="email"], input[name*="email" i]'),
-    });
-    if (await withEmail.count() > 0) return withEmail.first();
-
-    // Strategy 3: any form at all
-    const anyForm = this.page.locator('form').first();
-    if (await anyForm.count() > 0) return anyForm;
-
     return null;
   }
 
-  // ── Field inspection ─────────────────────────────────────────────────────────
-
-  /**
-   * Return metadata about each input/textarea/select inside the contact form.
-   */
-  async getFormFields(): Promise<FormFieldInfo[]> {
-    const form = await this.findContactForm();
-    if (!form) return [];
-
-    const inputLocator = form.locator('input:not([type="hidden"]):not([type="submit"]):not([type="button"]), textarea, select');
-    const count = await inputLocator.count();
-    const fields: FormFieldInfo[] = [];
-
-    for (let i = 0; i < count; i++) {
-      const el = inputLocator.nth(i);
-      const name =
-        (await el.getAttribute('name')) ??
-        (await el.getAttribute('id')) ??
-        (await el.getAttribute('placeholder')) ??
-        `field-${i}`;
-      const type = (await el.getAttribute('type')) ?? (await el.evaluate<string>((node) => node.tagName.toLowerCase()));
-      const required =
-        (await el.getAttribute('required')) !== null ||
-        (await el.getAttribute('aria-required')) === 'true';
-
-      fields.push({ name, type, required });
-    }
-
-    return fields;
-  }
-
-  // ── Field presence helpers ───────────────────────────────────────────────────
-
-  /** Returns true if the form contains an email input field. */
+  /** Always returns false — no form present. */
   async hasEmailField(): Promise<boolean> {
-    const form = await this.findContactForm();
-    if (!form) return false;
-    const emailField = form.locator(
-      'input[type="email"], input[name*="email" i], input[placeholder*="email" i]'
-    );
-    return (await emailField.count()) > 0;
+    return false;
   }
 
-  /** Returns true if the form contains a name input field. */
-  async hasNameField(): Promise<boolean> {
-    const form = await this.findContactForm();
-    if (!form) return false;
-    const nameField = form.locator(
-      'input[name*="name" i], input[placeholder*="name" i], input[autocomplete*="name" i]'
-    );
-    return (await nameField.count()) > 0;
-  }
-
-  /** Returns true if the form has a submit button. */
+  /** Always returns false — no form present. */
   async hasSubmitButton(): Promise<boolean> {
-    const form = await this.findContactForm();
-    if (!form) return false;
-    const submit = form.locator(
-      'button[type="submit"], input[type="submit"], button:not([type="button"]):not([type="reset"])'
-    ).filter({ hasText: /submit|send|contact|get in touch|reach out/i });
-
-    // Also accept any <button> inside the form (many forms omit type="submit")
-    if (await submit.count() > 0) return true;
-
-    const anyButton = form.locator('button, input[type="submit"]');
-    return (await anyButton.count()) > 0;
+    return false;
   }
 
-  // ── Form filling (without submission) ────────────────────────────────────────
-
-  /**
-   * Fill form fields with the provided key→value map.
-   * Keys are matched against field name, id, and placeholder attributes.
-   * Does NOT click submit.
-   */
-  async fillForm(data: Record<string, string>): Promise<void> {
-    const form = await this.findContactForm();
-    if (!form) throw new Error('[ContactFormPage] No contact form found on this page.');
-
-    for (const [key, value] of Object.entries(data)) {
-      const field = form.locator(
-        `input[name="${key}"], input[id="${key}"], input[placeholder*="${key}" i], ` +
-        `textarea[name="${key}"], textarea[id="${key}"], textarea[placeholder*="${key}" i]`
-      ).first();
-
-      if (await field.count() > 0) {
-        await field.fill(value);
-      }
-    }
+  /** Always returns false — no form present. */
+  async hasNameField(): Promise<boolean> {
+    return false;
   }
 
-  // ── High-level validation ────────────────────────────────────────────────────
-
-  /**
-   * Returns true if a contact form is present and appears to be functional
-   * (has at minimum an email field and a submit button).
-   */
-  async validateFormPresence(): Promise<boolean> {
-    const form = await this.findContactForm();
-    if (!form) return false;
-
-    const hasEmail = await this.hasEmailField();
-    const hasSubmit = await this.hasSubmitButton();
-
-    return hasEmail && hasSubmit;
+  /** Always returns an empty array — no form present. */
+  async getFormFields(): Promise<Array<{ name: string; type: string }>> {
+    return [];
   }
 }
+
+// Re-export as ContactFormPage for backwards compatibility with existing specs
+export { ContactPage as ContactFormPage };

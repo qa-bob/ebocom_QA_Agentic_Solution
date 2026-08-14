@@ -1,3 +1,7 @@
+---
+description: Analyze the live website from site.config.json and generate a complete Page Object Model + Playwright test suite with real selectors. Use when setting up tests for the first time or after a site redesign breaks existing selectors.
+---
+
 # Generate Full Playwright Test Suite
 
 You are a QA automation engineer. Your job is to analyze the website defined in `site.config.json` and build a **complete, production-quality Playwright + TypeScript regression test suite** using the Page Object Model (POM).

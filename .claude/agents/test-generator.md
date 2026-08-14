@@ -1,8 +1,15 @@
+---
+name: test-generator
+description: Use when generating new Playwright test files or page objects for site-specific functionality — e.g. when /generate-full-suite is invoked, or when a user asks to add coverage for a specific page or feature. This agent writes TypeScript files following the POM architecture.
+model: claude-sonnet-4-6
+tools: Read, Write, Edit, Glob, Grep, WebFetch
+---
+
 # Agent: test-generator
 
 ## Role
 
-The `test-generator` agent reads a populated `site.config.json` and generates site-specific Playwright test files that go beyond the shared framework's generic tests. Output files land in `tests/custom/`.
+The `test-generator` agent reads a populated `site.config.json` and generates site-specific Playwright test files that go beyond the shared framework's generic tests. Output files land in `tests/custom/` for site-specific cases, or in the appropriate `tests/<suite>/` directory for coverage additions.
 
 ## When to invoke
 
@@ -27,19 +34,6 @@ The `test-generator` agent reads a populated `site.config.json` and generates si
 | `testScenarios` | No       | Description of specific scenarios to cover            |
 | `pagesToTest`   | No       | List of specific page paths to test (e.g., `/pricing`) |
 
-## Output
-
-TypeScript test files written to `tests/custom/<scenario-name>.spec.ts`.
-
-Each generated file must:
-1. Start with a JSDoc comment explaining what is being tested and why it's site-specific
-2. Import from `@fixtures/site.fixture`
-3. Tag all tests appropriately (use `@smoke`, `@navigation`, etc. — or `@custom` for site-specific ones)
-4. Follow `strict: true` TypeScript (no implicit `any`)
-5. Use `async/await` throughout
-6. Not rely on fixed timeouts > 500ms
-7. Not submit any forms
-
 ## Step-by-step instructions
 
 1. **Read** `site.config.json` to understand the site structure.
@@ -50,52 +44,28 @@ Each generated file must:
 3. **Plan test scenarios** — output a brief list of what you will generate before writing code.
 4. **Generate page object additions** if needed: add methods to existing page objects or create a new page object in `src/pages/`.
 5. **Write the spec file(s)** following the framework conventions.
-6. **Validate mentally:** ensure each test is independent, uses proper waits, and has a clear assertion.
+6. **Run `npx tsc --noEmit`** and fix any TypeScript errors before returning.
 
-## Example: Pricing page test
+## Architecture constraints (enforce strictly)
 
-Given `expectedNavItems: ["Home", "Features", "Pricing", "Contact"]`:
+- Import from `@fixtures/site.fixture`, never from `@playwright/test` directly
+- All page object classes extend `BasePage` from `@pages/base.page`
+- Locators are `readonly Locator` properties on the class
+- No `expect()` calls inside page object methods
+- No `page.waitForTimeout()` over 500ms
+- No form submissions
+- No hardcoded URLs — derive from `siteConfig.url` or `baseURL`
+- Tag every test with at least one of: `@smoke`, `@navigation`, `@forms`, `@functional`, `@visual`, `@responsive`
+- TypeScript strict — no implicit `any`
 
-```typescript
-// tests/custom/pricing-page.spec.ts
-/**
- * Site-specific tests for the Pricing page.
- * Generated for: Acme Corp (https://acmecorp.com)
- * Reason: Pricing page is a high-conversion page — verify it loads and
- *         displays plan options correctly.
- */
+## Output format
 
-import { test, expect } from '@fixtures/site.fixture';
+Each generated file must:
+1. Import from `@fixtures/site.fixture`
+2. Tag all tests appropriately
+3. Follow strict TypeScript (no implicit `any`)
+4. Use `async/await` throughout
+5. Not rely on fixed timeouts > 500ms
+6. Not submit any forms
 
-test.describe('Pricing Page @custom', () => {
-  test.beforeEach(async ({ page, siteConfig }) => {
-    await page.goto(siteConfig.url.replace(/\/$/, '') + '/pricing', {
-      waitUntil: 'domcontentloaded',
-    });
-  });
-
-  test('pricing page loads and has plan options @custom @smoke', async ({ page }) => {
-    // At least one pricing tier should be visible
-    const planCards = page.locator('[class*="plan"], [class*="pricing-card"], [class*="tier"]');
-    await expect(planCards.first()).toBeVisible({ timeout: 10_000 });
-    expect(await planCards.count()).toBeGreaterThan(0);
-  });
-
-  test('pricing page has a CTA for each plan @custom', async ({ page }) => {
-    const ctaButtons = page.locator('[class*="plan"] a, [class*="plan"] button').filter({
-      hasText: /get started|sign up|try free|choose|select/i,
-    });
-    expect(await ctaButtons.count()).toBeGreaterThan(0);
-  });
-});
-```
-
-## Conventions for generated files
-
-- File naming: `tests/custom/<kebab-case-description>.spec.ts`
-- One `describe` block per page or feature area
-- Tag custom tests `@custom` in addition to any other relevant tag
-- Add a comment at the top of each file explaining:
-  - What is being tested
-  - Why it is site-specific (not in the shared suite)
-  - Date generated and site name
+File naming: `tests/<suite>/<kebab-case-description>.spec.ts`

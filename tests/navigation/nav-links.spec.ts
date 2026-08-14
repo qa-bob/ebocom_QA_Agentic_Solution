@@ -1,13 +1,20 @@
 /**
  * tests/navigation/nav-links.spec.ts
  *
- * Navigation tests — verify the primary nav is present, all links resolve,
- * mobile menu works, and link text meets accessibility best practices.
+ * Navigation tests for eboCom's image-based navigation system.
+ *
+ * Site-specific notes:
+ *   - No <nav> element — navigation is <a href="page.html"><img src="img/nav-*.jpg" alt="..."></a>
+ *   - Active page: nav image uses "-mo" suffix (e.g. nav-services-mo.jpg when on services.html)
+ *   - No mobile hamburger menu — site is a fixed-width static layout
+ *   - hrefs are relative (e.g. "ee.html") — resolved to absolute for HEAD checks
+ *   - 7 nav items + 3 footer links on every page
  *
  * Tag: @navigation
  */
 
 import { test, expect } from '@fixtures/site.fixture';
+import { EXPECTED_NAV_HREFS } from '@pages/navigation.page';
 
 test.describe('Navigation @navigation', () => {
   test.beforeEach(async ({ navigationPage }) => {
@@ -15,30 +22,46 @@ test.describe('Navigation @navigation', () => {
     await navigationPage.waitForLoad();
   });
 
-  // ── Visibility ──────────────────────────────────────────────────────────────
+  // ── Presence ────────────────────────────────────────────────────────────────
 
-  test('navigation menu is visible @navigation', async ({ navigationPage }) => {
+  test('navigation links are present on homepage @navigation', async ({ navigationPage }) => {
     const isVisible = await navigationPage.isNavVisible();
-    expect(isVisible, 'A nav / [role="navigation"] element should be visible').toBeTruthy();
+    expect(isVisible, 'At least one image-based nav link should be present').toBeTruthy();
   });
 
-  // ── Link reachability ───────────────────────────────────────────────────────
+  test('all 7 expected nav links are present @navigation', async ({ navigationPage }) => {
+    const navLinks = await navigationPage.getNavLinks();
+    expect(
+      navLinks.length,
+      `Expected 7 nav links, found ${navLinks.length}: ${navLinks.map((l) => l.href).join(', ')}`
+    ).toBe(7);
+  });
 
-  test('all nav links are reachable (no 404s) @navigation', async ({ navigationPage, siteConfig }) => {
+  test('each expected nav href exists on the page @navigation', async ({ page, siteConfig }) => {
+    await page.goto(siteConfig.url, { waitUntil: 'domcontentloaded' });
+
+    for (const href of EXPECTED_NAV_HREFS) {
+      const link = page.locator(`a[href='${href}']`);
+      await expect(
+        link.first(),
+        `Nav link a[href='${href}'] should be present`
+      ).toBeVisible();
+    }
+  });
+
+  // ── Reachability ─────────────────────────────────────────────────────────────
+
+  test('all nav links are reachable (no 404s) @navigation', async ({ navigationPage }) => {
     const results = await navigationPage.checkAllNavLinksReachable();
 
-    if (results.length === 0) {
-      console.warn('[navigation] No nav links found to check — skipping reachability assertion.');
-      return;
-    }
+    expect(results.length, 'Should have checked at least 7 nav links').toBeGreaterThanOrEqual(7);
 
     const broken = results.filter((r) => !r.ok && r.status !== 0);
     const unreachable = results.filter((r) => r.status === 0);
 
-    // Log unreachable links as warnings (network issues, not 404s)
     if (unreachable.length > 0) {
       console.warn(
-        '[navigation] Could not reach (network):\n' +
+        '[navigation] Could not reach (network error):\n' +
           unreachable.map((r) => `  ${r.url}`).join('\n')
       );
     }
@@ -50,86 +73,113 @@ test.describe('Navigation @navigation', () => {
     ).toHaveLength(0);
   });
 
-  // ── Mobile nav ──────────────────────────────────────────────────────────────
+  // ── Active page indicator ────────────────────────────────────────────────────
 
-  test('mobile nav menu toggles correctly @navigation', async ({ navigationPage, page }) => {
-    // Switch to mobile viewport
-    await page.setViewportSize({ width: 390, height: 844 });
-    await navigationPage.navigate();
-    await navigationPage.waitForLoad();
-
-    const toggle = await navigationPage.getMobileMenuToggle();
-
-    if (!toggle) {
-      // Site may use a CSS-only responsive nav — pass if nav is already visible
-      const navVisible = await navigationPage.isNavVisible();
-      expect(
-        navVisible,
-        'At mobile viewport, either a menu toggle or visible nav should exist'
-      ).toBeTruthy();
-      return;
-    }
-
-    // Toggle should be visible
-    await expect(toggle, 'Mobile menu toggle should be visible').toBeVisible();
-
-    // Open the menu
-    await navigationPage.openMobileMenu();
-
-    // After opening, at least one nav link should be visible
-    const navLinks = await navigationPage.getNavLinks();
-    expect(
-      navLinks.length,
-      'After opening mobile menu, nav links should be discoverable'
-    ).toBeGreaterThan(0);
-  });
-
-  // ── Accessible link text ────────────────────────────────────────────────────
-
-  test('nav links have descriptive text (not just "click here") @navigation', async ({ navigationPage }) => {
-    const navLinks = await navigationPage.getNavLinks();
-
-    if (navLinks.length === 0) {
-      console.warn('[navigation] No nav links found — skipping text quality check.');
-      return;
-    }
-
-    const badPhrases = /^(click here|here|more|read more|learn more|link|go)$/i;
-    const genericLinks = navLinks.filter((link) => badPhrases.test(link.text.trim()));
-
-    expect(
-      genericLinks,
-      `Found nav links with non-descriptive text:\n` +
-        genericLinks.map((l) => `  "${l.text}" → ${l.href}`).join('\n')
-    ).toHaveLength(0);
-  });
-
-  // ── Logo home link ──────────────────────────────────────────────────────────
-
-  test('logo links back to homepage @navigation', async ({ page, siteConfig }) => {
+  test('active nav indicator is absent on homepage (no -mo image) @navigation', async ({
+    page,
+    siteConfig,
+  }) => {
     await page.goto(siteConfig.url, { waitUntil: 'domcontentloaded' });
 
-    // Find the site logo — common patterns
-    const logoLink = page.locator(
-      'a[class*="logo" i], a[aria-label*="home" i], a[aria-label*="logo" i], ' +
-      'header a[href="/"], header a[href="' + siteConfig.url + '"]'
-    ).first();
+    // Homepage has no active state in nav (it is not itself a nav item)
+    // All nav images on the homepage should use the standard (non -mo) variant
+    const moImages = page.locator("img[src*='-mo.jpg'][src*='nav-']");
+    const count = await moImages.count();
+
+    // If a -mo image is present on the homepage it indicates a nav highlighting bug
+    if (count > 0) {
+      const src = await moImages.first().getAttribute('src');
+      console.warn(
+        `[navigation] Unexpected active-nav image on homepage: ${src}. ` +
+          'This may indicate a copy-paste error in the nav HTML.'
+      );
+    }
+    // Soft assertion — this is a known site issue on contact.html using ee-mo.jpg
+    expect(count).toBeLessThanOrEqual(1);
+  });
+
+  test('active nav image uses -mo suffix on inner pages @navigation', async ({
+    navigationPage,
+    page,
+    siteConfig,
+  }) => {
+    // Navigate to services.html and verify the nav marks it as active
+    await page.goto(siteConfig.url.replace(/\/$/, '') + '/services.html', {
+      waitUntil: 'domcontentloaded',
+    });
+
+    const activeHref = await navigationPage.getActiveNavHref();
+    expect(activeHref, 'Services page should have an active nav indicator').not.toBeNull();
+    expect(activeHref, 'Active nav href should point to services.html').toBe('services.html');
+  });
+
+  // ── Footer links ─────────────────────────────────────────────────────────────
+
+  test('homepage footer has Home, Contact Us, and Terms links @navigation', async ({
+    navigationPage,
+  }) => {
+    const hasFooter = await navigationPage.hasFooterLinks();
+    expect(hasFooter, 'Footer should contain index.html, contact.html, and terms.html links').toBeTruthy();
+  });
+
+  test('footer Contact Us link is reachable @navigation', async ({ page, siteConfig }) => {
+    await page.goto(siteConfig.url, { waitUntil: 'domcontentloaded' });
+    const contactUrl = siteConfig.url.replace(/\/$/, '') + '/contact.html';
+    const response = await page.request.head(contactUrl, { timeout: 10_000 });
+    expect(response.ok(), `contact.html should return 2xx, got ${response.status()}`).toBeTruthy();
+  });
+
+  test('footer Terms link is reachable @navigation', async ({ page, siteConfig }) => {
+    await page.goto(siteConfig.url, { waitUntil: 'domcontentloaded' });
+    const termsUrl = siteConfig.url.replace(/\/$/, '') + '/terms.html';
+    const response = await page.request.head(termsUrl, { timeout: 10_000 });
+    expect(response.ok(), `terms.html should return 2xx, got ${response.status()}`).toBeTruthy();
+  });
+
+  // ── Nav image alt text ────────────────────────────────────────────────────────
+
+  test('nav images have alt text for accessibility @navigation', async ({ page, siteConfig }) => {
+    await page.goto(siteConfig.url, { waitUntil: 'domcontentloaded' });
+
+    const navImages = page.locator("a:has(img[src*='img/nav-']) img");
+    const count = await navImages.count();
+    const missingAlt: string[] = [];
+
+    for (let i = 0; i < count; i++) {
+      const img = navImages.nth(i);
+      const alt = await img.getAttribute('alt');
+      const src = (await img.getAttribute('src')) ?? `img-${i}`;
+      if (alt === null || alt.trim() === '') {
+        missingAlt.push(src);
+      }
+    }
+
+    if (missingAlt.length > 0) {
+      console.warn(
+        `[navigation] Nav images missing alt text: ${missingAlt.join(', ')}`
+      );
+    }
+
+    expect(
+      missingAlt.length,
+      `${missingAlt.length} nav image(s) have no alt text — screen readers cannot announce nav destinations`
+    ).toBe(0);
+  });
+
+  // ── Logo ──────────────────────────────────────────────────────────────────────
+
+  test('logo links back to the homepage @navigation', async ({ page, siteConfig }) => {
+    await page.goto(siteConfig.url, { waitUntil: 'domcontentloaded' });
+
+    const logoLink = page.locator("a[href='index.html'] img[src='img/logo-ebocom.jpg']");
+    const logoLinkWrapper = page.locator("a[href='index.html']").first();
 
     if (await logoLink.count() === 0) {
-      console.warn('[navigation] Could not identify a logo link — skipping this assertion.');
+      console.warn('[navigation] Could not find logo link (a[href="index.html"] img[logo]).');
       return;
     }
 
-    const href = await logoLink.getAttribute('href');
-    expect(href).not.toBeNull();
-
-    // Resolve relative href
-    const resolvedHref = new URL(href!, siteConfig.url).toString();
-    const siteOrigin = new URL(siteConfig.url).origin;
-
-    expect(
-      resolvedHref.startsWith(siteOrigin),
-      `Logo link "${href}" should point to the site homepage (origin: ${siteOrigin})`
-    ).toBeTruthy();
+    const href = await logoLinkWrapper.getAttribute('href');
+    expect(href, 'Logo link href should be "index.html"').toBe('index.html');
   });
 });

@@ -1,8 +1,14 @@
 /**
  * src/pages/navigation.page.ts
  *
- * NavigationPage models the site's primary navigation.
- * Uses semantic role-based selectors and avoids site-specific class names.
+ * eboCom site navigation — image-based nav, no <nav> element, no id/class attributes.
+ *
+ * Site notes:
+ *   - Nav links: <a href="page.html"><img src="img/nav-page.jpg" alt="Page Name"></a>
+ *   - Active page indicator: the active nav image uses a "-mo" suffix
+ *     e.g. nav-services-mo.jpg when on services.html
+ *   - No mobile hamburger menu — site has no responsive design
+ *   - hrefs are relative (e.g. "ee.html") — resolved against config.url for HEAD requests
  */
 
 import { type Locator } from '@playwright/test';
@@ -19,110 +25,107 @@ export interface LinkCheckResult {
   ok: boolean;
 }
 
+/** Expected nav items in display order */
+export const EXPECTED_NAV_HREFS = [
+  'ee.html',
+  'about.html',
+  'services.html',
+  'pci.html',
+  'awards.html',
+  'media.html',
+  'jobs.html',
+] as const;
+
 export class NavigationPage extends BasePage {
   // ── Nav detection ────────────────────────────────────────────────────────────
 
   /**
-   * Return the primary navigation locator.
-   * Tries role="navigation" first, then <nav>, then header-scoped links.
+   * Locator for all navigation anchor elements.
+   * Matches <a> tags that contain an <img> with a "nav-" src — this reliably
+   * excludes the logo, footer links, and body content links.
    */
   private getNavLocator(): Locator {
-    return this.page.locator('nav, [role="navigation"]').first();
+    return this.page.locator("a:has(img[src*='img/nav-'])");
   }
 
-  /** Return true if a navigation element is visible on the page. */
+  /** Returns true if at least one nav link is present on the page. */
   async isNavVisible(): Promise<boolean> {
-    const nav = this.getNavLocator();
-    if (await nav.count() === 0) return false;
-    return nav.isVisible();
+    const count = await this.getNavLocator().count();
+    return count > 0;
   }
 
   // ── Nav links ────────────────────────────────────────────────────────────────
 
   /**
-   * Return all links inside the primary navigation with their text and href.
-   * Filters out empty hrefs and anchor-only links (#).
+   * Return all navigation links with their text (from img alt) and href.
+   * Falls back to inferring text from the href filename if alt is empty.
    */
   async getNavLinks(): Promise<NavLinkInfo[]> {
-    const nav = this.getNavLocator();
-    if (await nav.count() === 0) return [];
-
-    const links = nav.locator('a[href]');
+    const links = this.getNavLocator();
     const count = await links.count();
     const results: NavLinkInfo[] = [];
 
     for (let i = 0; i < count; i++) {
       const link = links.nth(i);
-      const text = ((await link.textContent()) ?? '').trim();
       const href = (await link.getAttribute('href')) ?? '';
+      if (!href || href.startsWith('javascript:') || href.startsWith('mailto:')) continue;
 
-      // Skip empty, anchor-only, or javascript: links
-      if (!href || href === '#' || href.startsWith('javascript:')) continue;
+      // Alt text on the nav image is the nav item label
+      const img = link.locator('img').first();
+      const alt = ((await img.getAttribute('alt')) ?? '').trim();
 
-      results.push({ text, href });
+      // Fallback: infer readable name from filename (e.g. "ee.html" → "EboCom Evolution")
+      const inferredText = alt || href.replace('.html', '').replace(/-/g, ' ');
+      results.push({ text: inferredText, href });
     }
 
     return results;
   }
 
   /**
-   * Click a navigation item by its visible text.
-   * Uses a case-insensitive partial match.
+   * Click a nav item by its href filename (e.g. 'services.html').
+   * More reliable than text matching since nav text comes from image alt attributes.
    */
-  async clickNavItem(text: string): Promise<void> {
-    const nav = this.getNavLocator();
-    const link = nav.getByRole('link', { name: text });
-    await link.first().click();
+  async clickNavItemByHref(href: string): Promise<void> {
+    const link = this.page.locator(`a[href='${href}']`).first();
+    await link.click();
     await this.page.waitForLoadState('domcontentloaded');
+  }
+
+  // ── Active page detection ────────────────────────────────────────────────────
+
+  /**
+   * Returns the href of the currently active nav item.
+   * The active page's nav image uses a "-mo" suffix (e.g. nav-ee-mo.jpg).
+   */
+  async getActiveNavHref(): Promise<string | null> {
+    const activeImg = this.page.locator("img[src*='nav-'][src*='-mo.jpg']").first();
+    if (await activeImg.count() === 0) return null;
+
+    const parentLink = activeImg.locator('xpath=..');
+    const href = await parentLink.getAttribute('href');
+    return href ?? null;
   }
 
   // ── Mobile menu ──────────────────────────────────────────────────────────────
 
   /**
-   * Return the mobile hamburger / menu toggle locator, or null if not found.
-   * Searches for common patterns: button with aria-label containing "menu",
-   * elements with class containing "hamburger", "menu-toggle", "nav-toggle".
+   * eboCom has no mobile hamburger menu — the site is a fixed-width static layout.
+   * Always returns null.
    */
   async getMobileMenuToggle(): Promise<Locator | null> {
-    const candidates = [
-      this.page.getByRole('button', { name: /menu|navigation|toggle|hamburger/i }),
-      this.page.locator('[class*="hamburger"], [class*="menu-toggle"], [class*="nav-toggle"]'),
-      this.page.locator('[aria-label*="menu" i], [aria-label*="navigation" i]').filter({ hasNotText: /^\s*$/ }),
-      this.page.locator('button[aria-expanded]').first(),
-    ];
-
-    for (const candidate of candidates) {
-      if (await candidate.count() > 0 && await candidate.first().isVisible()) {
-        return candidate.first();
-      }
-    }
-
     return null;
   }
 
-  /**
-   * Open the mobile navigation menu if a toggle exists and the menu is currently closed.
-   * No-op if no toggle is found (desktop layout).
-   */
   async openMobileMenu(): Promise<void> {
-    const toggle = await this.getMobileMenuToggle();
-    if (!toggle) return;
-
-    const isExpanded = await toggle.getAttribute('aria-expanded');
-    if (isExpanded === 'true') return; // Already open
-
-    await toggle.click();
-
-    // Wait briefly for animation
-    await this.page.waitForTimeout(400);
+    // No mobile menu on this site
   }
 
   // ── Link reachability ────────────────────────────────────────────────────────
 
   /**
-   * Check all nav links are reachable by issuing HEAD requests.
-   * Returns an array of results with URL, HTTP status, and ok flag.
-   * Relative URLs are resolved against config.url.
+   * Issue HEAD requests to all nav link hrefs and return status results.
+   * Resolves relative hrefs (e.g. "ee.html") against config.url.
    */
   async checkAllNavLinksReachable(): Promise<LinkCheckResult[]> {
     const navLinks = await this.getNavLinks();
@@ -139,19 +142,26 @@ export class NavigationPage extends BasePage {
       }
 
       try {
-        const response = await this.page.request.head(absoluteUrl, {
-          timeout: 10_000,
-        });
-        results.push({
-          url: absoluteUrl,
-          status: response.status(),
-          ok: response.ok(),
-        });
+        const response = await this.page.request.head(absoluteUrl, { timeout: 10_000 });
+        results.push({ url: absoluteUrl, status: response.status(), ok: response.ok() });
       } catch {
         results.push({ url: absoluteUrl, status: 0, ok: false });
       }
     }
 
     return results;
+  }
+
+  // ── Footer links ─────────────────────────────────────────────────────────────
+
+  /**
+   * Returns true if the three expected footer links are present:
+   * Home (index.html), Contact Us (contact.html), Terms & Conditions (terms.html).
+   */
+  async hasFooterLinks(): Promise<boolean> {
+    const home    = await this.page.locator("a[href='index.html']").count();
+    const contact = await this.page.locator("a[href='contact.html']").count();
+    const terms   = await this.page.locator("a[href='terms.html']").count();
+    return home > 0 && contact > 0 && terms > 0;
   }
 }
