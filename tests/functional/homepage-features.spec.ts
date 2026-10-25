@@ -97,7 +97,7 @@ test.describe('Homepage Content @functional', () => {
     for (let i = 0; i < count; i++) {
       const src = await navImages.nth(i).getAttribute('src');
       if (!src) continue;
-      const naturalWidth = await navImages.nth(i).evaluate<number>(
+      const naturalWidth = await navImages.nth(i).evaluate(
         (img) => (img as HTMLImageElement).naturalWidth
       );
       expect(

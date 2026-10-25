@@ -174,10 +174,7 @@ test.describe('Navigation @navigation', () => {
     const logoLink = page.locator("a[href='index.html'] img[src='img/logo-ebocom.jpg']");
     const logoLinkWrapper = page.locator("a[href='index.html']").first();
 
-    if (await logoLink.count() === 0) {
-      console.warn('[navigation] Could not find logo link (a[href="index.html"] img[logo]).');
-      return;
-    }
+    test.skip(await logoLink.count() === 0, 'Could not find logo link (a[href="index.html"] img[logo])');
 
     const href = await logoLinkWrapper.getAttribute('href');
     expect(href, 'Logo link href should be "index.html"').toBe('index.html');
