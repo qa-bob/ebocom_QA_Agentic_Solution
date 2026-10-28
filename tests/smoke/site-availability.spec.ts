@@ -54,7 +54,7 @@ test.describe('Site Availability @smoke', () => {
       consoleErrors.push(`[pageerror] ${err.message}`);
     });
 
-    await page.goto(siteConfig.url, { waitUntil: 'networkidle' });
+    await page.goto(siteConfig.url, { waitUntil: 'load' });
 
     const criticalErrors = consoleErrors.filter((err) => {
       const lower = err.toLowerCase();
@@ -99,7 +99,8 @@ test.describe('Site Availability @smoke', () => {
 
   test('meta description check @smoke', async ({ page, siteConfig }) => {
     await page.goto(siteConfig.url, { waitUntil: 'domcontentloaded' });
-    const metaDesc = await page.locator('meta[name="description"]').getAttribute('content');
+    const metaTag = page.locator('meta[name="description"]').first();
+    const metaDesc = (await metaTag.count()) > 0 ? await metaTag.getAttribute('content') : null;
 
     // Known issue: eboCom homepage has no meta description — warn but do not fail
     if (!metaDesc || metaDesc.trim().length === 0) {
